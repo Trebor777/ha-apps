@@ -3,7 +3,9 @@
 """
 solisart_mqtt.py — démon de publication MQTT avec Home Assistant Discovery.
 
-S'appuie sur solisart.py (même dossier) pour la partie portail MySolisArt.
+S'appuie sur solisart.py (même dossier) pour la partie portail MySolisArt,
+lui-même dérivé du script V04 de J&J_Ian1515 (GPL, usage commercial exclu :
+https://github.com/jean1492/SolisArt-HomeAssistant). Distribué sous GPL-2.0.
 Interroge le portail toutes les N secondes et publie :
 
   solisart/<node>/state    JSON de tous les relevés   (retain)

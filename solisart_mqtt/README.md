@@ -4,7 +4,12 @@ Passerelle entre le portail MySolisArt et Home Assistant, via MQTT Discovery.
 Aucune configuration YAML côté Home Assistant : les entités apparaissent seules
 sous un appareil « SolisArt ».
 
-## Option A — add-on local (Home Assistant OS)
+## Option A — app Home Assistant OS (recommandé)
+
+Ajouter le dépôt `https://github.com/Trebor777/ha-apps` dans **Paramètres → Apps →
+Boutique → ⋮ → Dépôts**, puis installer « SolisArt MQTT ».
+
+## Option A bis — app locale (Home Assistant OS)
 
 1. Copier ce dossier dans le partage `addons` de la machine :
 
@@ -119,3 +124,9 @@ Les températures reçoivent `device_class: temperature` et
 `state_class: measurement`, les compteurs d'énergie `total_increasing` : les
 statistiques long terme et le tableau de bord Énergie fonctionnent sans réglage
 supplémentaire. Les clés `rl*` deviennent des `binary_sensor`.
+
+## Crédits
+
+Dérivé du script `solisart.py` V04 de **J&J_Ian1515**
+([jean1492/SolisArt-HomeAssistant](https://github.com/jean1492/SolisArt-HomeAssistant)),
+publié sous GPL, usage commercial exclu. Même licence ici (GPL-2.0), même restriction.

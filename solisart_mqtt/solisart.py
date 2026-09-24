@@ -3,7 +3,8 @@
 """
 solisart.py — passerelle MySolisArt → Home Assistant (V05)
 
-Dérivé du script V04 de J&J_Ian1515 (GPL, usage commercial exclu).
+Dérivé du script V04 de J&J_Ian1515 (GPL, usage commercial exclu) :
+https://github.com/jean1492/SolisArt-HomeAssistant — distribué sous GPL-2.0.
 Même contrat de sortie : un objet JSON sur stdout, consommable par un
 `command_line` sensor.
 

@@ -2,7 +2,8 @@ name: SolisArt MQTT
 version: "1.0.0"
 slug: solisart_mqtt
 description: Passerelle MySolisArt vers MQTT, avec découverte automatique des entités
-url: https://github.com/jean1492/SolisArt-HomeAssistant
+# Dérivé de https://github.com/jean1492/SolisArt-HomeAssistant (J&J_Ian1515)
+url: https://github.com/Trebor777/ha-apps/tree/main/solisart_mqtt
 arch:
   - amd64
   - aarch64

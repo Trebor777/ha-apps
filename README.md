@@ -19,3 +19,15 @@ Ce dépôt est la source de vérité. Toute modification se fait ici, puis on in
 ## Installation
 
 Voir le README de chaque app.
+
+## Crédits et licence
+
+**SolisArt MQTT** est dérivé du script `solisart.py` V04 de **J&J_Ian1515**
+([jean1492/SolisArt-HomeAssistant](https://github.com/jean1492/SolisArt-HomeAssistant)),
+qui a trouvé comment lire les données du portail MySolisArt (authentification, endpoint
+`lecture_valeurs_donnees.php`, dictionnaire des codes). Tout le travail d'origine sur le
+protocole est le sien ; ce dépôt n'en est qu'une réécriture en démon MQTT.
+
+Le script d'origine est publié sous GPL avec la mention « usage commercial exclu ». Ce
+dépôt est donc distribué sous **GPL-2.0** (voir [`LICENSE`](LICENSE)), et la volonté de
+l'auteur est respectée : **aucun usage commercial**.
