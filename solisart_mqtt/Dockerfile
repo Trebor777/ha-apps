@@ -4,7 +4,7 @@ FROM $BUILD_FROM
 ENV PYTHONUNBUFFERED=1
 
 RUN apk add --no-cache python3 py3-pip \
-    && pip3 install --no-cache-dir --break-system-packages "paho-mqtt>=1.6"
+    && pip3 install --no-cache-dir --break-system-packages "paho-mqtt>=2.0,<3"
 
 COPY solisart.py solisart_mqtt.py run.sh /app/
 RUN chmod a+x /app/run.sh

@@ -28,7 +28,7 @@ Configuration par variables d'environnement :
 Dans un add-on Home Assistant, les paramètres MQTT sont récupérés
 automatiquement auprès du Supervisor : rien à saisir.
 
-Dépendance : paho-mqtt (1.6 ou 2.x).
+Dépendance : paho-mqtt 2.x.
 """
 
 from __future__ import annotations
@@ -118,11 +118,10 @@ class MqttSettings:
 
 
 def _make_client(client_id: str) -> "mqtt.Client":
-    """paho 2.x impose CallbackAPIVersion ; paho 1.6 ne le connaît pas."""
-    try:
-        return mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=client_id)
-    except AttributeError:  # paho-mqtt 1.x
-        return mqtt.Client(client_id=client_id)
+    """API de callbacks v2 (la v1 est dépréciée depuis paho-mqtt 2.0)."""
+    if not hasattr(mqtt, "CallbackAPIVersion"):
+        sys.exit("paho-mqtt 2.x requis : pip install 'paho-mqtt>=2.0'")
+    return mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
 
 
 # --------------------------------------------------------------------------- #
@@ -188,9 +187,9 @@ class Bridge:
 
     # -- MQTT ----------------------------------------------------------------- #
 
-    def _on_connect(self, client, userdata, flags, rc, properties=None) -> None:
-        if rc != 0:
-            LOG.error("Connexion MQTT refusée (code %s)", rc)
+    def _on_connect(self, client, userdata, flags, reason_code, properties) -> None:
+        if reason_code.is_failure:
+            LOG.error("Connexion MQTT refusée (%s)", reason_code)
             return
         LOG.info("Connecté à %s:%s", self.mqtt_cfg.host, self.mqtt_cfg.port)
         client.publish(self.avail_topic, "online", qos=1, retain=True)
@@ -198,8 +197,8 @@ class Bridge:
         # la découverte, sinon les entités restent orphelines côté HA.
         self.published.clear()
 
-    def _on_disconnect(self, client, userdata, rc, properties=None, reason=None) -> None:
-        LOG.warning("Déconnecté du broker (code %s), reconnexion automatique", rc)
+    def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties) -> None:
+        LOG.warning("Déconnecté du broker (%s), reconnexion automatique", reason_code)
 
     def _publish_discovery(self, reading: Reading) -> None:
         for key, value in reading.values.items():
