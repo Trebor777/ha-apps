@@ -1,0 +1,30 @@
+name: SolisArt MQTT
+version: "1.0.0"
+slug: solisart_mqtt
+description: Passerelle MySolisArt vers MQTT, avec découverte automatique des entités
+url: https://github.com/jean1492/SolisArt-HomeAssistant
+arch:
+  - amd64
+  - aarch64
+  - armv7
+init: false
+startup: application
+boot: auto
+# Le Supervisor injecte l'hôte, le port et les identifiants du broker :
+# aucun paramètre MQTT à saisir tant que Mosquitto tourne en add-on.
+services:
+  - mqtt:need
+options:
+  login: ""
+  password: ""
+  installation_id: ""
+  interval: 120
+  codes: "584-628"
+  log_level: info
+schema:
+  login: str
+  password: password
+  installation_id: str
+  interval: int(30,3600)
+  codes: str
+  log_level: list(debug|info|warning|error)
