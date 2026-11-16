@@ -13,7 +13,8 @@ Interroge le portail toutes les N secondes et publie :
   homeassistant/<composant>/<node>/<clé>/config       (retain)
 
 Les entités sont créées automatiquement dans Home Assistant : un `sensor` par
-grandeur, un `binary_sensor` par relais (clés `rl*`). Le `device_class` et le
+grandeur, un `binary_sensor` par relais (clés `rl*`), et pour chaque relais
+deux compteurs : durée de marche cumulée (h) et nombre de démarrages. Le `device_class` et le
 `state_class` sont déduits de l'unité renvoyée par le portail, ce qui donne
 l'historique long terme sans configuration YAML.
 
@@ -22,6 +23,8 @@ Configuration par variables d'environnement :
     SOLISART_INTERVAL      secondes entre deux relevés (défaut 120)
     SOLISART_CODES         plage de codes, ex. 584-628 (défaut) ou "all"
     SOLISART_NAMES         chemin d'un JSON {"flT1": "Température capteurs"}
+    SOLISART_RUNTIME_KEYS  grandeurs non-relais à doter d'un compteur de marche,
+                           séparées par des virgules (les relais `rl*` le sont d'office)
     MQTT_HOST / MQTT_PORT / MQTT_USERNAME / MQTT_PASSWORD / MQTT_TLS
     MQTT_DISCOVERY_PREFIX  défaut "homeassistant"
 
@@ -79,6 +82,63 @@ UNIT_MAP: dict[str, tuple[str | None, str, str | None]] = {
     "d": ("duration", "d", "measurement"),
     "j": ("duration", "d", "measurement"),
 }
+
+
+# --------------------------------------------------------------------------- #
+# Compteurs de marche
+# --------------------------------------------------------------------------- #
+
+ON_TEXT = {"on", "1", "true", "marche"}
+
+
+def is_on(value: Any) -> bool:
+    """Relais "on"/"off", ou grandeur numérique : en marche dès qu'elle est > 0."""
+    if isinstance(value, (int, float)):
+        return value > 0
+    return str(value).strip().lower() in ON_TEXT
+
+
+class RunCounters:
+    """Durée de marche cumulée et nombre de démarrages, par grandeur suivie.
+
+    Les compteurs ne font que croître (`total_increasing`) : Home Assistant en
+    tire des statistiques long terme, donc des heures de brûleur par jour, par
+    semaine ou par saison, conservées sans limite de durée.
+
+    Entre deux relevés, on suppose que l'état n'a pas changé. Si l'écart dépasse
+    `max_gap` (portail injoignable, add-on arrêté), l'intervalle n'est pas
+    compté : mieux vaut un trou qu'une durée de marche inventée.
+    """
+
+    def __init__(self, cache: Cache, max_gap: float) -> None:
+        self.cache = cache
+        self.max_gap = max_gap
+        stored = cache.read("counters")
+        self.data: dict[str, dict[str, Any]] = stored if isinstance(stored, dict) else {}
+
+    def update(self, key: str, value: Any, now: float) -> None:
+        on = is_on(value)
+        entry = self.data.get(key)
+        if entry is None:
+            # Premier relevé : pas de démarrage compté, l'état d'avant est inconnu.
+            self.data[key] = {"on_s": 0.0, "starts": 0, "on": on, "ts": now}
+            return
+        gap = now - entry["ts"]
+        if entry["on"] and 0 < gap <= self.max_gap:
+            entry["on_s"] += gap
+        if on and not entry["on"] and gap <= self.max_gap:
+            entry["starts"] += 1
+        entry["on"] = on
+        entry["ts"] = now
+
+    def hours(self, key: str) -> float:
+        return round(self.data[key]["on_s"] / 3600, 3)
+
+    def starts(self, key: str) -> int:
+        return int(self.data[key]["starts"])
+
+    def save(self) -> None:
+        self.cache.write("counters", self.data)
 
 
 # --------------------------------------------------------------------------- #
@@ -144,6 +204,13 @@ class Bridge:
         self.avail_topic = f"{self.base}/status"
 
         self.friendly = self._load_names()
+        # Relais (`rl*`) suivis d'office ; SOLISART_RUNTIME_KEYS ajoute d'autres
+        # grandeurs, par exemple une consigne de circulateur en %.
+        extra = os.environ.get("SOLISART_RUNTIME_KEYS", "")
+        # bashio renvoie "null" pour une option vide.
+        self.runtime_extra = {k.strip() for k in extra.split(",") if k.strip() not in ("", "null")}
+        # Trois intervalles sans relevé : on considère qu'il y a eu une coupure.
+        self.counters = RunCounters(self.cache, max_gap=3 * interval)
         self.published: set[str] = set()
         self.failures = 0
         self.stop = threading.Event()
@@ -259,8 +326,53 @@ class Bridge:
             )
             self.published.add("LastUpdate")
 
-    def _publish_state(self, reading: Reading) -> None:
+        for key in self._tracked(reading):
+            label = self.friendly.get(key, key)
+            for suffix, extra in (
+                ("runtime", {"name": f"{label} — durée de marche", "unit_of_measurement": "h",
+                             "device_class": "duration", "icon": "mdi:timer-outline"}),
+                ("starts", {"name": f"{label} — démarrages", "icon": "mdi:counter"}),
+            ):
+                field_key = f"{key}_{suffix}"
+                if field_key in self.published:
+                    continue
+                payload = {
+                    "unique_id": f"solisart_{self.node}_{field_key}",
+                    "object_id": f"solisart_{field_key}",
+                    "state_topic": self.state_topic,
+                    "value_template": "{{ value_json['%s'] }}" % field_key,
+                    "state_class": "total_increasing",
+                    "availability_topic": self.avail_topic,
+                    "payload_available": "online",
+                    "payload_not_available": "offline",
+                    "device": self.device,
+                    **extra,
+                }
+                topic = f"{self.mqtt_cfg.discovery_prefix}/sensor/{self.node}/{field_key}/config"
+                self.mqtt.publish(topic, json.dumps(payload, ensure_ascii=False), qos=1, retain=True)
+                self.published.add(field_key)
+
+    def _tracked(self, reading: Reading) -> list[str]:
+        """Grandeurs dotées d'un compteur : tous les relais, plus les clés demandées."""
+        keys = [k for k in reading.values if k.startswith("rl") or k in self.runtime_extra]
+        missing = self.runtime_extra - set(reading.values)
+        if missing:
+            LOG.debug("SOLISART_RUNTIME_KEYS absentes du relevé : %s", ", ".join(sorted(missing)))
+        return keys
+
+    def _update_counters(self, reading: Reading) -> dict[str, Any]:
+        now = time.time()
+        fields: dict[str, Any] = {}
+        for key in self._tracked(reading):
+            self.counters.update(key, reading.values[key], now)
+            fields[f"{key}_runtime"] = self.counters.hours(key)
+            fields[f"{key}_starts"] = self.counters.starts(key)
+        self.counters.save()
+        return fields
+
+    def _publish_state(self, reading: Reading, extra: dict[str, Any] | None = None) -> None:
         payload = dict(reading.values)
+        payload.update(extra or {})
         payload["LastUpdate"] = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
         if reading.newest_hour and reading.newest_hour > 1_000_000_000:
             payload["MeasureTime"] = datetime.fromtimestamp(
@@ -277,7 +389,7 @@ class Bridge:
         if not reading:
             raise SolisartError("Aucune donnée dans la plage de codes demandée")
         self._publish_discovery(reading)
-        self._publish_state(reading)
+        self._publish_state(reading, self._update_counters(reading))
         self.cache.write("last", reading.values)
         if self.failures:
             LOG.info("Connexion au portail rétablie")
