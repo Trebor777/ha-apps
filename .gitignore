@@ -1,2 +1,8 @@
 __pycache__/
 *.pyc
+
+# Exports SolisArt et sorties d analyse : données privées, jamais versionnées
+tools/solisart_analyse/exports/
+tools/solisart_analyse/*.png
+tools/solisart_analyse/*.csv
+*.zip
