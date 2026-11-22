@@ -131,8 +131,11 @@ Chaque relais (`rl*`) reçoit deux capteurs supplémentaires :
 
 | Entité | Contenu |
 |---|---|
-| `sensor.solisart_<clé>_runtime` | durée de marche cumulée, en heures |
-| `sensor.solisart_<clé>_starts` | nombre de démarrages cumulé |
+| `sensor.solisart_<clé>_duree_de_marche` | durée de marche cumulée, en heures |
+| `sensor.solisart_<clé>_demarrages` | nombre de démarrages cumulé |
+
+Home Assistant dérive l'`entity_id` du nom de l'entité : ces identifiants
+sont ceux obtenus avec les noms par défaut.
 
 Ce sont des compteurs croissants (`total_increasing`) : la carte « Graphique
 de statistiques » affiche directement les heures de marche par jour, semaine
@@ -148,7 +151,7 @@ trois intervalles (portail injoignable, add-on arrêté) n'est pas compté.
 ### Indicateur de dérive : heures de brûleur par degré-jour
 
 `sensor.solisart_t9` est la sonde extérieure sur l'installation d'origine ;
-`sensor.solisart_rl0_runtime` est à remplacer par le compteur du relais qui
+`sensor.solisart_rl0_duree_de_marche` est à remplacer par le compteur du relais qui
 commande le brûleur (ou de la clé ajoutée à `runtime_keys`).
 
 ```yaml
@@ -170,7 +173,7 @@ sensor:
 
 utility_meter:
   bruleur_jour:
-    source: sensor.solisart_rl0_runtime
+    source: sensor.solisart_rl0_duree_de_marche
     cycle: daily
   degres_jours_jour:
     source: sensor.degres_jours
