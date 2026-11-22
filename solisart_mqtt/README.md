@@ -125,6 +125,62 @@ Les températures reçoivent `device_class: temperature` et
 statistiques long terme et le tableau de bord Énergie fonctionnent sans réglage
 supplémentaire. Les clés `rl*` deviennent des `binary_sensor`.
 
+## Compteurs de marche
+
+Chaque relais (`rl*`) reçoit deux capteurs supplémentaires :
+
+| Entité | Contenu |
+|---|---|
+| `sensor.solisart_<clé>_runtime` | durée de marche cumulée, en heures |
+| `sensor.solisart_<clé>_starts` | nombre de démarrages cumulé |
+
+Ce sont des compteurs croissants (`total_increasing`) : la carte « Graphique
+de statistiques » affiche directement les heures de marche par jour, semaine
+ou mois, sur toute la durée de vie de l'installation.
+
+Pour suivre une grandeur qui n'est pas un relais (une consigne de circulateur
+en %, par exemple), l'ajouter à l'option `runtime_keys`, séparée par des
+virgules : elle est considérée en marche dès que sa valeur est > 0.
+
+Les compteurs sont stockés dans `/data/cache/counters.json`. Un trou de plus de
+trois intervalles (portail injoignable, add-on arrêté) n'est pas compté.
+
+### Indicateur de dérive : heures de brûleur par degré-jour
+
+À adapter : `sensor.solisart_flt9` (température extérieure) et
+`sensor.solisart_rlchaudiere_runtime` (brûleur) sont des noms d'exemple.
+
+```yaml
+template:
+  - sensor:
+      - name: "Écart au seuil de chauffe"
+        unique_id: solisart_ecart_seuil_chauffe
+        unit_of_measurement: "°C"
+        state: "{{ [18 - states('sensor.solisart_flt9') | float(18), 0] | max }}"
+
+sensor:
+  - platform: integration          # °C × jours = degrés-jours cumulés
+    source: sensor.ecart_au_seuil_de_chauffe
+    name: "Degrés-jours"
+    unique_id: solisart_degres_jours
+    unit_time: d
+    method: left
+    round: 2
+
+utility_meter:
+  bruleur_jour:
+    source: sensor.solisart_rlchaudiere_runtime
+    cycle: daily
+  degres_jours_jour:
+    source: sensor.degres_jours
+    cycle: daily
+```
+
+Le ratio du jour (`bruleur_jour / degres_jours_jour`) reste à peu près stable
+d'une année sur l'autre à réglages constants. S'il dérive durablement à la
+hausse, quelque chose a changé : réglage, ensoleillement, ou un défaut (pression
+du circuit solaire, sonde, vanne).
+
 ## Crédits
 
 Dérivé du script `solisart.py` V04 de **J&J_Ian1515**

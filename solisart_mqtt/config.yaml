@@ -1,5 +1,5 @@
 name: SolisArt MQTT
-version: "1.0.1"
+version: "1.1.0"
 slug: solisart_mqtt
 description: Passerelle MySolisArt vers MQTT, avec découverte automatique des entités
 # Dérivé de https://github.com/jean1492/SolisArt-HomeAssistant (J&J_Ian1515)
@@ -20,6 +20,7 @@ options:
   installation_id: ""
   interval: 120
   codes: "584-628"
+  runtime_keys: ""
   log_level: info
 schema:
   login: str
@@ -27,4 +28,5 @@ schema:
   installation_id: str
   interval: int(30,3600)
   codes: str
+  runtime_keys: str?
   log_level: list(debug|info|warning|error)
