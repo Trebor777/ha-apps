@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1
+
+- Correctif : les `binary_sensor` des relais (`rl*`) restaient `unknown`. Le
+  portail renvoie `On`/`Off` alors que la découverte attendait `on`/`off` ; la
+  casse est désormais normalisée.
+- README : exemple degrés-jours avec les vrais noms d'entités
+  (`sensor.solisart_t9`, `sensor.solisart_rl0_runtime`).
+
 ## 1.1.0
 
 - Compteurs de marche pour chaque relais (`rl*`) : durée cumulée en heures et

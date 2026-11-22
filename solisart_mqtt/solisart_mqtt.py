@@ -284,7 +284,13 @@ class Bridge:
                 "device": self.device,
             }
             if component == "binary_sensor":
-                payload.update({"payload_on": "on", "payload_off": "off"})
+                # Le portail renvoie "On"/"Off" : on normalise la casse, sans quoi
+                # Home Assistant ne reconnaît aucun des deux états (`unknown`).
+                payload.update({
+                    "value_template": "{{ value_json['%s'] | string | lower }}" % key,
+                    "payload_on": "on",
+                    "payload_off": "off",
+                })
             else:
                 unit = reading.units.get(key)
                 device_class, unit_norm, state_class = UNIT_MAP.get(

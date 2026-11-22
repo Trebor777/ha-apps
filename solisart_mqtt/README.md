@@ -147,8 +147,9 @@ trois intervalles (portail injoignable, add-on arrêté) n'est pas compté.
 
 ### Indicateur de dérive : heures de brûleur par degré-jour
 
-À adapter : `sensor.solisart_flt9` (température extérieure) et
-`sensor.solisart_rlchaudiere_runtime` (brûleur) sont des noms d'exemple.
+`sensor.solisart_t9` est la sonde extérieure sur l'installation d'origine ;
+`sensor.solisart_rl0_runtime` est à remplacer par le compteur du relais qui
+commande le brûleur (ou de la clé ajoutée à `runtime_keys`).
 
 ```yaml
 template:
@@ -156,7 +157,7 @@ template:
       - name: "Écart au seuil de chauffe"
         unique_id: solisart_ecart_seuil_chauffe
         unit_of_measurement: "°C"
-        state: "{{ [18 - states('sensor.solisart_flt9') | float(18), 0] | max }}"
+        state: "{{ [18 - states('sensor.solisart_t9') | float(18), 0] | max }}"
 
 sensor:
   - platform: integration          # °C × jours = degrés-jours cumulés
@@ -169,7 +170,7 @@ sensor:
 
 utility_meter:
   bruleur_jour:
-    source: sensor.solisart_rlchaudiere_runtime
+    source: sensor.solisart_rl0_runtime
     cycle: daily
   degres_jours_jour:
     source: sensor.degres_jours
