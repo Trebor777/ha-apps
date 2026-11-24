@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.2
+
+- Relevés figés détectés : si la mesure la plus récente renvoyée date de plus
+  de trois intervalles (10 min au moins), le relevé est rejeté. Les entités
+  passent `unavailable` au lieu d'afficher des valeurs périmées, et les
+  compteurs de marche ne tournent pas sur ces données. Cas rencontré : le
+  boîtier, privé de DNS, n'envoyait plus rien, et le portail a resservi sa
+  dernière mesure pendant 9 heures.
+- Nouveaux capteurs de diagnostic : « Âge du relevé » (min) et « Source des
+  relevés ».
+- Lecture directe sur le boîtier du réseau local (options `local_host`,
+  `local_login`, `local_password`), avec le portail en secours. Le boîtier
+  sert la même API que le portail, mais avec son propre compte.
+
 ## 1.1.1
 
 - Correctif : les `binary_sensor` des relais (`rl*`) restaient `unknown`. Le

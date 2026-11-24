@@ -7,6 +7,9 @@ export SOLISART_ID="$(bashio::config 'installation_id')"
 export SOLISART_INTERVAL="$(bashio::config 'interval')"
 export SOLISART_CODES="$(bashio::config 'codes')"
 export SOLISART_RUNTIME_KEYS="$(bashio::config 'runtime_keys')"
+export SOLISART_LOCAL_HOST="$(bashio::config 'local_host')"
+export SOLISART_LOCAL_LOGIN="$(bashio::config 'local_login')"
+export SOLISART_LOCAL_PASSWORD="$(bashio::config 'local_password')"
 export LOG_LEVEL="$(bashio::config 'log_level')"
 
 # /data est le seul volume persistant d'un add-on : sessions et dictionnaire
