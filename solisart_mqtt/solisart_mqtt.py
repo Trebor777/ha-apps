@@ -23,6 +23,9 @@ Configuration par variables d'environnement :
     SOLISART_INTERVAL      secondes entre deux relevés (défaut 120)
     SOLISART_CODES         plage de codes, ex. 584-628 (défaut) ou "all"
     SOLISART_NAMES         chemin d'un JSON {"flT1": "Température capteurs"}
+    SOLISART_LOCAL_HOST    adresse du boîtier sur le réseau local (optionnel) ;
+    SOLISART_LOCAL_LOGIN / SOLISART_LOCAL_PASSWORD  son compte local. Le portail
+                           sert de secours si le boîtier ne répond pas.
     SOLISART_RUNTIME_KEYS  grandeurs non-relais à doter d'un compteur de marche,
                            séparées par des virgules (les relais `rl*` le sont d'office)
     MQTT_HOST / MQTT_PORT / MQTT_USERNAME / MQTT_PASSWORD / MQTT_TLS
@@ -36,6 +39,7 @@ Dépendance : paho-mqtt 2.x.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import os
@@ -184,6 +188,29 @@ def _make_client(client_id: str) -> "mqtt.Client":
     return mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
 
 
+def _local_config(cfg: Config) -> Config | None:
+    """Configuration du boîtier local (SOLISART_LOCAL_*), ou None s'il n'est pas réglé.
+
+    Le boîtier sert la même API que le portail, avec ses propres comptes.
+    """
+    def env(name: str) -> str:
+        value = os.environ.get(name, "").strip()
+        return "" if value == "null" else value  # bashio : "null" pour une option vide
+
+    host = env("SOLISART_LOCAL_HOST")
+    login, password = env("SOLISART_LOCAL_LOGIN"), env("SOLISART_LOCAL_PASSWORD")
+    if not host:
+        return None
+    if not (login and password):
+        LOG.warning("Boîtier local %s ignoré : identifiant ou mot de passe local manquant", host)
+        return None
+    domain = host if "://" in host else f"http://{host}"
+    cache_dir = cfg.cache_dir / "local"   # session et dictionnaire séparés de ceux du portail
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return dataclasses.replace(cfg, domain=domain.rstrip("/"), login=login,
+                               password=password, cache_dir=cache_dir)
+
+
 # --------------------------------------------------------------------------- #
 # Passerelle
 # --------------------------------------------------------------------------- #
@@ -196,7 +223,18 @@ class Bridge:
         self.interval = interval
         self.wanted = wanted
         self.cache = Cache(cfg.cache_dir)
-        self.client_api = SolisartClient(cfg, self.cache)
+        # Sources essayées dans l'ordre : le boîtier sur le réseau local s'il est
+        # configuré (indépendant d'internet et du portail), puis le portail.
+        self.sources: list[tuple[str, SolisartClient]] = []
+        local = _local_config(cfg)
+        if local:
+            self.sources.append(("local", SolisartClient(local, Cache(local.cache_dir))))
+        self.sources.append(("portail", SolisartClient(cfg, self.cache)))
+        self.source: str | None = None
+        # Un relevé dont la mesure la plus récente date de plus de trois
+        # intervalles (10 min au moins) est figé : le boîtier n'envoie plus rien
+        # (coupure internet, DNS…) et le portail ressert sa dernière mesure.
+        self.stale_after = max(3 * interval, 600)
 
         self.node = self._node_id(cfg.installation_id)
         self.base = f"solisart/{self.node}"
@@ -332,6 +370,30 @@ class Bridge:
             )
             self.published.add("LastUpdate")
 
+        for field_key, extra in (
+            ("MeasureAge", {"name": "Âge du relevé", "unit_of_measurement": "min",
+                            "state_class": "measurement", "icon": "mdi:clock-alert-outline"}),
+            ("Source", {"name": "Source des relevés", "icon": "mdi:server-network"}),
+        ):
+            if field_key in self.published:
+                continue
+            payload = {
+                "unique_id": f"solisart_{self.node}_{field_key.lower()}",
+                "object_id": f"solisart_{field_key.lower()}",
+                "state_topic": self.state_topic,
+                # "None" est interprété comme « inconnu » par Home Assistant.
+                "value_template": "{{ value_json['%s'] | default(None) }}" % field_key,
+                "entity_category": "diagnostic",
+                "availability_topic": self.avail_topic,
+                "payload_available": "online",
+                "payload_not_available": "offline",
+                "device": self.device,
+                **extra,
+            }
+            topic = f"{self.mqtt_cfg.discovery_prefix}/sensor/{self.node}/{field_key.lower()}/config"
+            self.mqtt.publish(topic, json.dumps(payload, ensure_ascii=False), qos=1, retain=True)
+            self.published.add(field_key)
+
         for key in self._tracked(reading):
             label = self.friendly.get(key, key)
             for suffix, extra in (
@@ -389,13 +451,45 @@ class Bridge:
 
     # -- boucle ---------------------------------------------------------------- #
 
+    @staticmethod
+    def _measure_age(reading: Reading) -> float | None:
+        """Secondes écoulées depuis la mesure la plus récente, si elle est horodatée."""
+        if reading.newest_hour and reading.newest_hour > 1_000_000_000:
+            return max(0.0, time.time() - reading.newest_hour)
+        return None
+
+    def _read(self) -> tuple[str, Reading, float | None]:
+        """Premier relevé frais parmi les sources ; erreur si aucune n'en fournit."""
+        errors = []
+        for name, client in self.sources:
+            try:
+                dictionary = client.data_dictionary()
+                reading = parse_values(client.raw_values(), dictionary, self.wanted)
+                if not reading:
+                    raise SolisartError("aucune donnée dans la plage de codes demandée")
+                age = self._measure_age(reading)
+                if age is not None and age > self.stale_after:
+                    raise SolisartError(f"relevé figé, dernière mesure il y a {age / 60:.0f} min")
+            except Exception as exc:  # noqa: BLE001 — on passe à la source suivante
+                errors.append(f"{name} : {exc}")
+                if len(self.sources) > 1:
+                    LOG.warning("Source %s inutilisable : %s", name, exc)
+                continue
+            if name != self.source:
+                LOG.info("Relevés lus sur : %s", name)
+                self.source = name
+            return name, reading, age
+        raise SolisartError(" ; ".join(errors))
+
     def _poll_once(self) -> None:
-        dictionary = self.client_api.data_dictionary()
-        reading = parse_values(self.client_api.raw_values(), dictionary, self.wanted)
-        if not reading:
-            raise SolisartError("Aucune donnée dans la plage de codes demandée")
+        # Un relevé figé lève une erreur : les compteurs ne tournent pas sur des
+        # données périmées, et le trou n'est pas compté à la reprise (max_gap).
+        source, reading, age = self._read()
         self._publish_discovery(reading)
-        self._publish_state(reading, self._update_counters(reading))
+        fields = self._update_counters(reading)
+        fields["Source"] = source
+        fields["MeasureAge"] = round(age / 60, 1) if age is not None else None
+        self._publish_state(reading, fields)
         self.cache.write("last", reading.values)
         if self.failures:
             LOG.info("Connexion au portail rétablie")

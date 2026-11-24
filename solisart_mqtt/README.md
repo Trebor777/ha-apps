@@ -125,6 +125,23 @@ Les températures reçoivent `device_class: temperature` et
 statistiques long terme et le tableau de bord Énergie fonctionnent sans réglage
 supplémentaire. Les clés `rl*` deviennent des `binary_sensor`.
 
+## Boîtier local et relevés figés
+
+Le boîtier SolisArt sert sur le réseau local la même interface que le portail
+(`http://<ip-du-boîtier>/`), avec **ses propres comptes** : les identifiants du
+portail n'y fonctionnent pas. Renseigner `local_host` (adresse IP ou nom),
+`local_login` et `local_password` pour lire le boîtier directement. Le portail
+reste en secours si le boîtier ne répond pas. Le boîtier se consulte en HTTP non
+chiffré : il ne doit pas être exposé à internet (aucune redirection de port).
+
+Quelle que soit la source, un relevé dont la mesure la plus récente date de plus
+de trois intervalles (10 min au moins) est considéré comme figé : c'est le cas
+quand le boîtier n'envoie plus rien au portail, qui ressert alors sa dernière
+mesure. Les entités passent `unavailable` et les compteurs de marche s'arrêtent
+jusqu'au retour de mesures fraîches. Deux capteurs de diagnostic suivent l'état
+de la liaison : « Âge du relevé » (minutes) et « Source des relevés »
+(`local` ou `portail`).
+
 ## Compteurs de marche
 
 Chaque relais (`rl*`) reçoit deux capteurs supplémentaires :
